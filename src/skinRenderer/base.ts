@@ -12,7 +12,6 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
 
 export type Vertex = [x: number, y: number, z: number, u: number, v: number, nx: number, ny: number, nz: number];
 export type VertexElementCount = Vertex["length"];
-export const VERTEX_ELEMENT_COUNT = 8;
 export type Triangle = [a: Vertex, b: Vertex, c: Vertex] & {
     normal?: m4.Vector3
 };
@@ -30,6 +29,9 @@ export type PoseKeys = "head" | "body" | "bodyInv" | "leftArm" | "rightArm" | "l
     "catTail1" | "catTail2";
 
 export type PoseData = Record<PoseKeys, m4.Vector3>;
+
+export const VERTEX_ELEMENT_COUNT = 8;
+export const SHADOW_VERTEX_ELEMENT_COUNT = 5;
 
 export class Bone {
     public cuboids: Cuboid[];
@@ -292,6 +294,11 @@ export enum PoseType {
     BackLookAtMouseCursor,
 }
 
+export interface SkinRendererInit {
+    slim: boolean,
+    drawShadow: boolean
+}
+
 export abstract class SkinRenderer {
     // public uniforms: Record<string, WebGLUniformLocation>;
     // public attributes: Record<string, WebGLAttribLocation>;
@@ -489,7 +496,7 @@ export abstract class SkinRenderer {
         let camTx = 0;
         let camTy = 24;
         let camTz = -50;
-        const globalTranslate = [0, 0, 0];
+        const globalTranslate: [number, number, number] = [0, 0, 0];
 
         function transformBone(bone: Bone, mat?: m4.Matrix4x4) {
             mat ??= m4.translation(globalTranslate[0], globalTranslate[1], globalTranslate[2]);
@@ -787,7 +794,7 @@ export abstract class SkinRenderer {
         prepareCuboids(cuboids);
 
         // Start rendering
-        this.render({ camTx, camTy, camTz, cuboids });
+        this.render({ camTx, camTy, camTz, globalTranslate, cuboids });
     }
 
     protected abstract render(data: RenderData): void;
@@ -797,5 +804,6 @@ export interface RenderData {
     camTx: number;
     camTy: number;
     camTz: number;
+    globalTranslate: [number, number, number];
     cuboids: Cuboid[]
 }

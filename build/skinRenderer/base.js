@@ -1,6 +1,7 @@
 import { log, warn, lerp, getPixelHex, getPixel, clamp } from "../common.js";
 import * as m4 from "../m4.js";
 export const VERTEX_ELEMENT_COUNT = 8;
+export const SHADOW_VERTEX_ELEMENT_COUNT = 5;
 export class Bone {
     cuboids;
     pivot;
@@ -652,7 +653,7 @@ export class SkinRenderer {
         }
         prepareCuboids(cuboids);
         // Start rendering
-        this.render({ camTx, camTy, camTz, cuboids });
+        this.render({ camTx, camTy, camTz, globalTranslate, cuboids });
     }
 }
 //# sourceMappingURL=base.js.map

@@ -57,7 +57,7 @@
             }
 
             .skin-3d {
-                filter: drop-shadow(0 0 0.75rem rgba(0, 0, 0, .5));
+                /* filter: drop-shadow(0 0 0.75rem rgba(0, 0, 0, .5)); */
                 opacity: 0;
             }
 
@@ -90,7 +90,7 @@
         window.memoize = memoize;
 
         (async () => {
-            var skins = [
+            const skins = [
                 {
                     path: "yuieii.png",
                     slim: true
@@ -101,30 +101,25 @@
                 }
             ];
 
-            var noCosmetics = location.search.indexOf("noGrass") != -1 || 
-                location.search.indexOf("noLeaf") != -1 || 
-                location.search.indexOf("noLeaves") != -1 ||
-                location.search.indexOf("noCosmetics") != -1;
-
-            var renderers = [];
-            var container = document.getElementById("container");
-            for (var i = 0; i < skins.length; i++) {
-                var div = document.createElement("div");
+            const renderers = [];
+            const container = document.getElementById("container");
+            for (let i = 0; i < skins.length; i++) {
+                const div = document.createElement("div");
                 div.classList.add("skin-item");
-                var skin = skins[i];
+                const skin = skins[i];
 
                 await (async () => {
-                    var renderer = await SkinRendererFactory.createPreferred(skin.path, !!skin.slim);
-                    renderer.noAnim = location.search.indexOf("noAnim") != -1;
+                    const renderer = await SkinRendererFactory.createPreferred(skin.path, !!skin.slim);
+                    renderer.noAnim = false;
 
-                    renderer.noGrass = noCosmetics;
-                    renderer.noEeveeEars = noCosmetics;
-                    renderer.noCatEars = noCosmetics;
-                    renderer.noCatTail = noCosmetics;
+                    renderer.noGrass = true;
+                    renderer.noEeveeEars = true;
+                    renderer.noCatEars = true;
+                    renderer.noCatTail = true;
                     
-                    var canvas = await renderer.createCanvas();
+                    const canvas = await renderer.createCanvas();
 
-                    var mult = 1.5; // Math.sqrt(2);
+                    const mult = 1.5; // Math.sqrt(2);
                     canvas.width = 420 * mult;
                     canvas.height = 720 * mult;
                     canvas.style.width = canvas.width / mult;
@@ -135,10 +130,10 @@
                 })();
 
                 await (async () => {
-                    var renderer = new AvatarRenderer(skin.path);
-                    renderer.noGrass = noCosmetics;
+                    const renderer = new AvatarRenderer(skin.path);
+                    renderer.noGrass = false;
                     renderer.resolution = 512; 
-                    var canvas = await renderer.createAvatarCanvas();
+                    const canvas = await renderer.createAvatarCanvas();
                     canvas.dataset.skinUrl = skin.path;
                     canvas.classList.add("avatar");
                     div.appendChild(canvas);
@@ -148,7 +143,7 @@
             function render() {
                 requestAnimationFrame(() => render());
 
-                var removal = [];
+                const removal = [];
                 renderers.forEach(r => {
                     try {
                         // r.poseType = PoseType.Walk;
@@ -166,7 +161,7 @@
 
             renderers.forEach(r => {
                 r.canvas.classList.add("skin-loaded");
-            })
+            });
         })();
     </script>
 </html>

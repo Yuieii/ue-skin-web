@@ -1,5 +1,5 @@
 import * as m4 from "../m4.js";
-import { RenderData, SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
+import { RenderData, SHADOW_VERTEX_ELEMENT_COUNT, SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
 import { log } from "../common.js";
 
 export class WebGPUSkinRenderer extends SkinRenderer {
@@ -13,10 +13,15 @@ export class WebGPUSkinRenderer extends SkinRenderer {
     public texture: GPUTexture = null!;
     public depthTexture: GPUTexture = null!;
     public pipeline: GPURenderPipeline = null!;
+    public shadowPipeline: GPURenderPipeline = null!;
     public vertexBindGroup: GPUBindGroup = null!;
     public fragmentBindGroupLayout: GPUBindGroupLayout = null!;
     public fragmentBindGroup: GPUBindGroup = null!;
     public vertexBuffer: GPUBuffer = null!;
+
+    public shadowFragmentBindGroupLayout: GPUBindGroupLayout = null!;
+    public shadowFragmentBindGroup: GPUBindGroup = null!;
+
     private deviceReadyPromise: Promise<void>;
 
     constructor(skin: HTMLImageElement | string, slim: boolean) {
@@ -149,8 +154,45 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             }
         `;
 
+        const shadowShaderSource = /* wgsl */`
+            struct VSIn {
+                @location(0) pos: vec3f,
+                @location(1) texCoord: vec2f,
+            };
+
+            struct VertexUniforms {
+                matrix: mat4x4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uv: VertexUniforms;
+
+            struct VSOut {
+                @builtin(position) pos: vec4f,
+                @location(0) texCoord: vec2f,
+            };
+
+            @vertex fn vsMain(v: VSIn) -> VSOut {
+                var vsOut: VSOut;
+                vsOut.pos = uv.matrix * vec4f(v.pos, 1);
+                vsOut.texCoord = v.texCoord;
+                return vsOut;
+            }
+
+            @fragment fn fsMain(v: VSOut) -> @location(0) vec4f {
+                var d2 = v.texCoord - vec2f(0.5, 0.5);
+                var d = d2.x * d2.x + d2.y * d2.y;
+                d = clamp(d * 5.0, 0.0, 1.0) * 0.5 + 0.25;
+
+                return vec4f(vec3f(d), 1.0 - d);
+            }
+        `;
+
         const shaderModule = device.createShaderModule({
             code: shaderSource
+        });
+        
+        const shadowShaderModule = device.createShaderModule({
+            code: shadowShaderSource
         });
 
         this.vertexUniformBuffer = device.createBuffer({
@@ -234,6 +276,15 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             ]
         });
 
+        this.shadowFragmentBindGroupLayout = device.createBindGroupLayout({
+            entries: []
+        });
+
+        this.shadowFragmentBindGroup = device.createBindGroup({
+            layout: this.shadowFragmentBindGroupLayout,
+            entries: []
+        });
+
         this.depthTexture = device.createTexture({
             format: "depth24plus",
             size: {
@@ -302,6 +353,66 @@ export class WebGPUSkinRenderer extends SkinRenderer {
                 depthCompare: "less"
             },
             layout,
+            primitive: {
+                cullMode: "none",
+                frontFace: "ccw",
+            }
+        });
+        
+        const shadowLayout = device.createPipelineLayout({
+            bindGroupLayouts: [
+                vertexBindGroupLayout,
+                this.shadowFragmentBindGroupLayout
+            ]
+        });
+
+        this.shadowPipeline = device.createRenderPipeline({
+            vertex: {
+                module: shadowShaderModule,
+                entryPoint: "vsMain",
+                buffers: [
+                    {
+                        arrayStride: SHADOW_VERTEX_ELEMENT_COUNT * 4,
+                        attributes: [
+                            {
+                                shaderLocation: 0,
+                                offset: 0,
+                                format: "float32x3"
+                            },
+                            {
+                                shaderLocation: 1,
+                                offset: 3 * 4,
+                                format: "float32x2"
+                            }
+                        ]
+                    }
+                ]
+            },
+            fragment: {
+                module: shadowShaderModule,
+                entryPoint: "fsMain",
+                targets: [
+                    {
+                        format: gpu.getPreferredCanvasFormat(),
+                        blend: {
+                            alpha: {
+                                srcFactor: "src-alpha",
+                                dstFactor: "one-minus-src-alpha"
+                            },
+                            color: {
+                                srcFactor: "src-alpha",
+                                dstFactor: "one-minus-src-alpha"
+                            }
+                        }
+                    }
+                ]
+            },
+            depthStencil: {
+                format: "depth24plus",
+                depthWriteEnabled: true,
+                depthCompare: "less"
+            },
+            layout: shadowLayout,
             primitive: {
                 cullMode: "none",
                 frontFace: "ccw",
@@ -382,7 +493,7 @@ export class WebGPUSkinRenderer extends SkinRenderer {
     protected override render(data: RenderData) {
         if (!this.device) return;
 
-        const { camTx, camTy, camTz, cuboids } = data;
+        const { camTx, camTy, camTz, globalTranslate, cuboids } = data;
 
         // Start rendering
         const canvas = this.canvas!;
@@ -394,14 +505,24 @@ export class WebGPUSkinRenderer extends SkinRenderer {
         const viewMat = m4.inverse(camMat);
         const viewProjMat = m4.multiply(projMat, viewMat);
 
+        const shadowSize = 24 - globalTranslate[1] / 2;
+        const shSizeH = shadowSize / 2;
+        const shadowY = -23;
+
+        // Shadow
         device.queue.writeBuffer(this.vertexUniformBuffer, 0,
             new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
-
-        device.queue.writeBuffer(this.fragmentUniformBuffer, 0,
-            new Float32Array([1]));
-
+        
         device.queue.writeBuffer(this.vertexBuffer, 0,
-            new Float32Array(cuboids.flat(3)));
+            new Float32Array([
+                -shSizeH, shadowY, -shSizeH, 0, 0,
+                shSizeH, shadowY, -shSizeH, 1, 0,
+                -shSizeH, shadowY, shSizeH, 0, 1,
+
+                shSizeH, shadowY, -shSizeH, 1, 0,
+                -shSizeH, shadowY, shSizeH, 0, 1,
+                shSizeH, shadowY, shSizeH, 1, 1,
+            ]));
 
         if (this.depthTexture.width != canvas.width || this.depthTexture.height != canvas.height) {
             this.depthTexture.destroy();
@@ -412,22 +533,64 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             });
         }
 
+        const shadowCommandEncoder = device.createCommandEncoder();
         const commandEncoder = device.createCommandEncoder();
-        const renderPass = commandEncoder.beginRenderPass({
+        const swapchain = ctx.getCurrentTexture();
+        const swapchainView = swapchain.createView();
+        const depthView = this.depthTexture.createView({
+            aspect: "depth-only"
+        });
+        
+        const shadowRenderPass = shadowCommandEncoder.beginRenderPass({
             colorAttachments: [
                 {
                     clearValue: [0, 0, 0, 0],
-                    view: ctx.getCurrentTexture().createView(),
+                    view: swapchainView,
                     loadOp: "clear",
                     storeOp: "store"
                 }
             ],
             depthStencilAttachment: {
-                view: this.depthTexture.createView({
-                    aspect: "depth-only"
-                }),
+                view: depthView,
                 depthClearValue: 1,
                 depthLoadOp: "clear",
+                depthStoreOp: "store"
+            }
+        });
+
+        shadowRenderPass.setPipeline(this.shadowPipeline);
+        shadowRenderPass.setViewport(0, 0, canvas.width, canvas.height, 0, 1);
+        shadowRenderPass.setBindGroup(0, this.vertexBindGroup);
+        shadowRenderPass.setBindGroup(1, this.shadowFragmentBindGroup);
+        shadowRenderPass.setVertexBuffer(0, this.vertexBuffer);
+        shadowRenderPass.draw(6);
+        shadowRenderPass.end();
+
+        const shadowCommandBuffer = shadowCommandEncoder.finish();
+        device.queue.submit([shadowCommandBuffer]);
+
+        // ---
+
+        device.queue.writeBuffer(this.vertexUniformBuffer, 0,
+            new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
+
+        device.queue.writeBuffer(this.fragmentUniformBuffer, 0,
+            new Float32Array([1]));
+
+        device.queue.writeBuffer(this.vertexBuffer, 0,
+            new Float32Array(cuboids.flat(3)));
+        
+        const renderPass = commandEncoder.beginRenderPass({
+            colorAttachments: [
+                {
+                    view: swapchainView,
+                    loadOp: "load",
+                    storeOp: "store"
+                }
+            ],
+            depthStencilAttachment: {
+                view: depthView,
+                depthLoadOp: "load",
                 depthStoreOp: "store"
             }
         });
@@ -439,6 +602,8 @@ export class WebGPUSkinRenderer extends SkinRenderer {
         renderPass.setVertexBuffer(0, this.vertexBuffer);
         renderPass.draw(cuboids.flat(2).length);
         renderPass.end();
+
+        // ---
 
         const commandBuffer = commandEncoder.finish();
         device.queue.submit([commandBuffer]);
