@@ -83,20 +83,20 @@
         </div> -->
     </body>
     <script type="module">
-        import { AvatarRenderer } from "/avatar/build/avatarRenderer.js";
-        import { SkinRendererFactory } from "/avatar/build/skinRenderer/factory.js";
-        import { PoseType } from "/avatar/build/skinRenderer/base.js";
-        import { memoize } from "/avatar/build/common.js";
+        import { AvatarRenderer } from "./build/avatarRenderer.js";
+        import { SkinRendererFactory } from "./build/skinRenderer/factory.js";
+        import { PoseType } from "./build/skinRenderer/base.js";
+        import { memoize } from "./build/common.js";
         window.memoize = memoize;
 
         (async () => {
             var skins = [
                 {
-                    path: "/avatar/yuieii.png",
+                    path: "yuieii.png",
                     slim: true
                 },
                 {
-                    path: "/avatar/momian.png",
+                    path: "momian.png",
                     slim: true
                 }
             ];
