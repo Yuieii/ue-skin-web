@@ -1,0 +1,172 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width" />
+        <style>
+            .flex-container {
+                display: flex;
+            }
+
+            .flex-container:not(#container) {
+                justify-content: center;
+            }
+
+            .repo-link {
+                margin: 0 50px;
+                margin-bottom: 20px;
+                color: #000;
+                font-size: 0.9rem;
+                text-decoration: none;
+                border-radius: 9999px;
+                padding: 0.77em;
+                opacity: 0.5;
+            }
+
+            .repo-link > * {
+                vertical-align: middle;
+            }
+
+            .repo-link:hover {
+                background: #eee;
+            }
+
+            .flex-container#container {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .skin-item {
+                text-align: center;
+                position: relative;
+                margin: 10px 0;
+                display: inline-block;
+                margin: 15px;
+                background: #fff;
+                border: 1px solid #eee;
+                border-radius: 8px;
+                box-shadow: 0px 0px 5px #ccc;
+                overflow: hidden;
+            }
+
+            .avatar {
+                padding: 10px;
+                width: 64px;
+                position: absolute;
+                top: 15px;
+                left: 15px;
+            }
+
+            .skin-3d {
+                filter: drop-shadow(0 0 0.75rem rgba(0, 0, 0, .5));
+                opacity: 0;
+            }
+
+            .skin-3d.skin-loaded {
+                transition: opacity 1s;
+                opacity: 1;   
+            }
+
+            @media screen and (max-width: 560px) {
+                .skin-3d {
+                    max-width: calc(100vw - 70px);
+                    min-width: 250px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container" class="flex-container"></div>
+        <!-- <div class="flex-container">
+            <a class="repo-link" href="#" target="_blank">
+                <img src="https://static-00.iconduck.com/assets.00/pleading-face-emoji-2048x2048-z5m6xd68.png" width="24" />
+            </a>
+        </div> -->
+    </body>
+    <script type="module">
+        import { AvatarRenderer } from "/avatar/build/avatarRenderer.js";
+        import { SkinRendererFactory } from "/avatar/build/skinRenderer/factory.js";
+        import { PoseType } from "/avatar/build/skinRenderer/base.js";
+        import { memoize } from "/avatar/build/common.js";
+        window.memoize = memoize;
+
+        (async () => {
+            var skins = [
+                {
+                    path: "/avatar/yuieii.png",
+                    slim: true
+                },
+                {
+                    path: "/avatar/momian.png",
+                    slim: true
+                }
+            ];
+
+            var noCosmetics = location.search.indexOf("noGrass") != -1 || 
+                location.search.indexOf("noLeaf") != -1 || 
+                location.search.indexOf("noLeaves") != -1 ||
+                location.search.indexOf("noCosmetics") != -1;
+
+            var renderers = [];
+            var container = document.getElementById("container");
+            for (var i = 0; i < skins.length; i++) {
+                var div = document.createElement("div");
+                div.classList.add("skin-item");
+                var skin = skins[i];
+
+                await (async () => {
+                    var renderer = await SkinRendererFactory.createPreferred(skin.path, !!skin.slim);
+                    renderer.noAnim = location.search.indexOf("noAnim") != -1;
+
+                    renderer.noGrass = noCosmetics;
+                    renderer.noEeveeEars = noCosmetics;
+                    renderer.noCatEars = noCosmetics;
+                    renderer.noCatTail = noCosmetics;
+                    
+                    var canvas = await renderer.createCanvas();
+
+                    var mult = 1.5; // Math.sqrt(2);
+                    canvas.width = 420 * mult;
+                    canvas.height = 720 * mult;
+                    canvas.style.width = canvas.width / mult;
+                    canvas.classList.add("skin-3d");
+                    div.appendChild(canvas);
+                    renderers.push(renderer);
+                    container.appendChild(div);
+                })();
+
+                await (async () => {
+                    var renderer = new AvatarRenderer(skin.path);
+                    renderer.noGrass = noCosmetics;
+                    renderer.resolution = 512; 
+                    var canvas = await renderer.createAvatarCanvas();
+                    canvas.dataset.skinUrl = skin.path;
+                    canvas.classList.add("avatar");
+                    div.appendChild(canvas);
+                })();
+            }
+
+            function render() {
+                requestAnimationFrame(() => render());
+
+                var removal = [];
+                renderers.forEach(r => {
+                    try {
+                        // r.poseType = PoseType.Walk;
+                        // r.poseType = PoseType.LookAtMouseCursor;
+                        r.update();
+                    } catch(ex) {
+                        console.error(ex);
+                        removal.push(r);
+                    }
+                });
+
+                removal.forEach(r => renderers.splice(renderers.indexOf(r), 1));
+            }
+            render();
+
+            renderers.forEach(r => {
+                r.canvas.classList.add("skin-loaded");
+            })
+        })();
+    </script>
+</html>
