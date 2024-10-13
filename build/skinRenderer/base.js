@@ -239,6 +239,7 @@ export class SkinRenderer {
     isSlim;
     skinPath;
     skin;
+    drawShadow;
     noGrass;
     noEeveeEars;
     noCatEars;
@@ -275,6 +276,7 @@ export class SkinRenderer {
         else {
             throw new Error("Invalid skin argument");
         }
+        this.drawShadow = true;
         this.noAnim = false;
         this.noGrass = false;
         this.isGrass = false;

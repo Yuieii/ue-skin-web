@@ -194,33 +194,35 @@ export class WebGLSkinRenderer extends SkinRenderer {
         const uMatrix = uniforms.get("matrix");
         const uShadeMix = uniforms.get("shadeMix");
         const uTexture = uniforms.get("texture");
-        gl.useProgram(this.shadowProgram);
-        // Matrix uniform
-        gl.uniformMatrix4fv(uMatrix[1], false, m4.translate(viewProjMat, 0, 0, 0));
-        const vertexBuffer = this.vertexBuffer;
-        const sizeFloat = Float32Array.BYTES_PER_ELEMENT;
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-        const shadowSize = 24 - globalTranslate[1] / 2;
-        const shSizeH = shadowSize / 2;
-        const shadowY = -23;
-        // Shadow
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            -shSizeH, shadowY, -shSizeH, 0, 0,
-            shSizeH, shadowY, -shSizeH, 1, 0,
-            -shSizeH, shadowY, shSizeH, 0, 1,
-            shSizeH, shadowY, -shSizeH, 1, 0,
-            -shSizeH, shadowY, shSizeH, 0, 1,
-            shSizeH, shadowY, shSizeH, 1, 1,
-        ]), gl.STATIC_DRAW);
         const posAttr = attrs.get("pos");
         const uvAttr = attrs.get("uv");
         const normalAttr = attrs.get("normal");
         posAttr.forEach(a => gl.enableVertexAttribArray(a));
         uvAttr.forEach(a => gl.enableVertexAttribArray(a));
         normalAttr.forEach(a => gl.enableVertexAttribArray(a));
-        gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 0);
-        gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        const vertexBuffer = this.vertexBuffer;
+        const sizeFloat = Float32Array.BYTES_PER_ELEMENT;
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        if (this.drawShadow) {
+            gl.useProgram(this.shadowProgram);
+            // Matrix uniform
+            gl.uniformMatrix4fv(uMatrix[1], false, m4.translate(viewProjMat, 0, 0, 0));
+            const shadowSize = 24 - globalTranslate[1] / 2;
+            const shSizeH = shadowSize / 2;
+            const shadowY = -23;
+            // Shadow
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -shSizeH, shadowY, -shSizeH, 0, 0,
+                shSizeH, shadowY, -shSizeH, 1, 0,
+                -shSizeH, shadowY, shSizeH, 0, 1,
+                shSizeH, shadowY, -shSizeH, 1, 0,
+                -shSizeH, shadowY, shSizeH, 0, 1,
+                shSizeH, shadowY, shSizeH, 1, 1,
+            ]), gl.STATIC_DRAW);
+            gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 0);
+            gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
         // ---
         gl.useProgram(this.program);
         // Matrix uniform

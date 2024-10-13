@@ -504,70 +504,72 @@ export class WebGPUSkinRenderer extends SkinRenderer {
         const camMat = m4.scale(m4.lookAt([camTx, camTy, camTz], [0, 0, 0], [0, 1, 0]), -1, 1, 1);
         const viewMat = m4.inverse(camMat);
         const viewProjMat = m4.multiply(projMat, viewMat);
-
-        const shadowSize = 24 - globalTranslate[1] / 2;
-        const shSizeH = shadowSize / 2;
-        const shadowY = -23;
-
-        // Shadow
-        device.queue.writeBuffer(this.vertexUniformBuffer, 0,
-            new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
         
-        device.queue.writeBuffer(this.vertexBuffer, 0,
-            new Float32Array([
-                -shSizeH, shadowY, -shSizeH, 0, 0,
-                shSizeH, shadowY, -shSizeH, 1, 0,
-                -shSizeH, shadowY, shSizeH, 0, 1,
-
-                shSizeH, shadowY, -shSizeH, 1, 0,
-                -shSizeH, shadowY, shSizeH, 0, 1,
-                shSizeH, shadowY, shSizeH, 1, 1,
-            ]));
-
-        if (this.depthTexture.width != canvas.width || this.depthTexture.height != canvas.height) {
-            this.depthTexture.destroy();
-            this.depthTexture = device.createTexture({
-                format: "depth24plus",
-                size: { width: canvas.width, height: canvas.height },
-                usage: GPUTextureUsage.RENDER_ATTACHMENT
-            });
-        }
-
-        const shadowCommandEncoder = device.createCommandEncoder();
         const commandEncoder = device.createCommandEncoder();
         const swapchain = ctx.getCurrentTexture();
         const swapchainView = swapchain.createView();
         const depthView = this.depthTexture.createView({
             aspect: "depth-only"
         });
+
+        if (this.drawShadow) {
+            const shadowSize = 24 - globalTranslate[1] / 2;
+            const shSizeH = shadowSize / 2;
+            const shadowY = -23;
+
+            // Shadow
+            device.queue.writeBuffer(this.vertexUniformBuffer, 0,
+                new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
         
-        const shadowRenderPass = shadowCommandEncoder.beginRenderPass({
-            colorAttachments: [
-                {
-                    clearValue: [0, 0, 0, 0],
-                    view: swapchainView,
-                    loadOp: "clear",
-                    storeOp: "store"
-                }
-            ],
-            depthStencilAttachment: {
-                view: depthView,
-                depthClearValue: 1,
-                depthLoadOp: "clear",
-                depthStoreOp: "store"
+            device.queue.writeBuffer(this.vertexBuffer, 0,
+                new Float32Array([
+                    -shSizeH, shadowY, -shSizeH, 0, 0,
+                    shSizeH, shadowY, -shSizeH, 1, 0,
+                    -shSizeH, shadowY, shSizeH, 0, 1,
+
+                    shSizeH, shadowY, -shSizeH, 1, 0,
+                    -shSizeH, shadowY, shSizeH, 0, 1,
+                    shSizeH, shadowY, shSizeH, 1, 1,
+                ]));
+
+            if (this.depthTexture.width != canvas.width || this.depthTexture.height != canvas.height) {
+                this.depthTexture.destroy();
+                this.depthTexture = device.createTexture({
+                    format: "depth24plus",
+                    size: { width: canvas.width, height: canvas.height },
+                    usage: GPUTextureUsage.RENDER_ATTACHMENT
+                });
             }
-        });
 
-        shadowRenderPass.setPipeline(this.shadowPipeline);
-        shadowRenderPass.setViewport(0, 0, canvas.width, canvas.height, 0, 1);
-        shadowRenderPass.setBindGroup(0, this.vertexBindGroup);
-        shadowRenderPass.setBindGroup(1, this.shadowFragmentBindGroup);
-        shadowRenderPass.setVertexBuffer(0, this.vertexBuffer);
-        shadowRenderPass.draw(6);
-        shadowRenderPass.end();
+            const shadowCommandEncoder = device.createCommandEncoder();
+            const shadowRenderPass = shadowCommandEncoder.beginRenderPass({
+                colorAttachments: [
+                    {
+                        clearValue: [0, 0, 0, 0],
+                        view: swapchainView,
+                        loadOp: "clear",
+                        storeOp: "store"
+                    }
+                ],
+                depthStencilAttachment: {
+                    view: depthView,
+                    depthClearValue: 1,
+                    depthLoadOp: "clear",
+                    depthStoreOp: "store"
+                }
+            });
 
-        const shadowCommandBuffer = shadowCommandEncoder.finish();
-        device.queue.submit([shadowCommandBuffer]);
+            shadowRenderPass.setPipeline(this.shadowPipeline);
+            shadowRenderPass.setViewport(0, 0, canvas.width, canvas.height, 0, 1);
+            shadowRenderPass.setBindGroup(0, this.vertexBindGroup);
+            shadowRenderPass.setBindGroup(1, this.shadowFragmentBindGroup);
+            shadowRenderPass.setVertexBuffer(0, this.vertexBuffer);
+            shadowRenderPass.draw(6);
+            shadowRenderPass.end();
+
+            const shadowCommandBuffer = shadowCommandEncoder.finish();
+            device.queue.submit([shadowCommandBuffer]);
+        }
 
         // ---
 

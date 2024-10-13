@@ -305,6 +305,7 @@ export abstract class SkinRenderer {
     public isSlim: boolean;
     public skinPath: string;
     public skin: HTMLImageElement;
+    public drawShadow: boolean;
     public noGrass: boolean;
     public noEeveeEars: boolean;
     public noCatEars: boolean;
@@ -342,6 +343,7 @@ export abstract class SkinRenderer {
             throw new Error("Invalid skin argument");
         }
 
+        this.drawShadow = true;
         this.noAnim = false;
 
         this.noGrass = false;
