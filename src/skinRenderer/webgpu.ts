@@ -586,13 +586,15 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             colorAttachments: [
                 {
                     view: swapchainView,
-                    loadOp: "load",
+                    clearValue: [0, 0, 0, 0],
+                    loadOp: this.drawShadow ? "load" : "clear",
                     storeOp: "store"
                 }
             ],
             depthStencilAttachment: {
                 view: depthView,
-                depthLoadOp: "load",
+                depthClearValue: 1,
+                depthLoadOp: this.drawShadow ? "load" : "clear",
                 depthStoreOp: "store"
             }
         });
