@@ -1,5 +1,5 @@
 import * as m4 from "../m4.js";
-import { SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
+import { SHADOW_VERTEX_ELEMENT_COUNT, SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
 import { log } from "../common.js";
 function createShader(gl, type, source) {
     const handle = gl.createShader(type);
@@ -29,6 +29,7 @@ export class WebGLSkinRenderer extends SkinRenderer {
     attributes;
     context;
     program;
+    shadowProgram;
     texture;
     vertexBuffer;
     constructor(skin, slim) {
@@ -120,19 +121,49 @@ export class WebGLSkinRenderer extends SkinRenderer {
             outColor = mix(color, vec4(lighten, a), uShadeMix);
         }          
         `;
+        const shadowVertexShaderSource = `#version 300 es
+        in vec3 aPos;
+        in vec2 aTexCoord;
+        
+        uniform mat4 uMatrix;
+
+        out vec2 vTexCoord;
+        
+        void main() {
+            gl_Position = uMatrix * vec4(aPos, 1);
+            vTexCoord = aTexCoord;
+        }
+        `;
+        const shadowFragShaderSource = `#version 300 es
+        precision highp float;
+        
+        in vec2 vTexCoord;
+        out vec4 outColor;
+        
+        void main() {
+            vec2 d2 = vTexCoord - vec2(0.5, 0.5);
+            float d = d2.x * d2.x + d2.y * d2.y;
+            d = clamp(d * 5.0, 0.0, 1.0) * 0.5 + 0.25;
+
+            outColor = vec4(vec3(d), 1.0 - d);
+        }            
+        `;
         const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
         const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSource);
         const program = createProgram(gl, vertexShader, fragShader);
-        gl.useProgram(program);
         this.program = program;
+        const shVertexShader = createShader(gl, gl.VERTEX_SHADER, shadowVertexShaderSource);
+        const shFragShader = createShader(gl, gl.FRAGMENT_SHADER, shadowFragShaderSource);
+        const shadowProgram = createProgram(gl, shVertexShader, shFragShader);
+        this.shadowProgram = shadowProgram;
         const uniforms = this.uniforms;
         const attrs = this.attributes;
-        uniforms.set("matrix", gl.getUniformLocation(program, "uMatrix"));
-        uniforms.set("texture", gl.getUniformLocation(program, "uTexture"));
-        uniforms.set("shadeMix", gl.getUniformLocation(program, "uShadeMix"));
-        attrs.set("pos", gl.getAttribLocation(program, "aPos"));
-        attrs.set("uv", gl.getAttribLocation(program, "aTexCoord"));
-        attrs.set("normal", gl.getAttribLocation(program, "aNormal"));
+        uniforms.set("matrix", [program, shadowProgram].map(p => gl.getUniformLocation(p, "uMatrix")));
+        uniforms.set("texture", [program].map(p => gl.getUniformLocation(p, "uTexture")));
+        uniforms.set("shadeMix", [program].map(p => gl.getUniformLocation(p, "uShadeMix")));
+        attrs.set("pos", [program, shadowProgram].map(p => gl.getAttribLocation(p, "aPos")));
+        attrs.set("uv", [program, shadowProgram].map(p => gl.getAttribLocation(p, "aTexCoord")));
+        attrs.set("normal", [program].map(p => gl.getAttribLocation(p, "aNormal")));
     }
     uploadSkinTextureData(skin) {
         const gl = this.context;
@@ -144,7 +175,7 @@ export class WebGLSkinRenderer extends SkinRenderer {
         gl.generateMipmap(gl.TEXTURE_2D);
     }
     render(data) {
-        const { camTx, camTy, camTz, cuboids } = data;
+        const { camTx, camTy, camTz, globalTranslate, cuboids } = data;
         // Start rendering
         const canvas = this.canvas;
         const gl = this.context;
@@ -163,30 +194,50 @@ export class WebGLSkinRenderer extends SkinRenderer {
         const uMatrix = uniforms.get("matrix");
         const uShadeMix = uniforms.get("shadeMix");
         const uTexture = uniforms.get("texture");
+        gl.useProgram(this.shadowProgram);
         // Matrix uniform
-        gl.uniformMatrix4fv(uMatrix, false, m4.translate(viewProjMat, 0, 0, 0));
+        gl.uniformMatrix4fv(uMatrix[1], false, m4.translate(viewProjMat, 0, 0, 0));
+        const vertexBuffer = this.vertexBuffer;
+        const sizeFloat = Float32Array.BYTES_PER_ELEMENT;
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        const shadowSize = 24 - globalTranslate[1] / 2;
+        const shSizeH = shadowSize / 2;
+        const shadowY = -23;
+        // Shadow
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -shSizeH, shadowY, -shSizeH, 0, 0,
+            shSizeH, shadowY, -shSizeH, 1, 0,
+            -shSizeH, shadowY, shSizeH, 0, 1,
+            shSizeH, shadowY, -shSizeH, 1, 0,
+            -shSizeH, shadowY, shSizeH, 0, 1,
+            shSizeH, shadowY, shSizeH, 1, 1,
+        ]), gl.STATIC_DRAW);
+        const posAttr = attrs.get("pos");
+        const uvAttr = attrs.get("uv");
+        const normalAttr = attrs.get("normal");
+        posAttr.forEach(a => gl.enableVertexAttribArray(a));
+        uvAttr.forEach(a => gl.enableVertexAttribArray(a));
+        normalAttr.forEach(a => gl.enableVertexAttribArray(a));
+        gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 0);
+        gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        // ---
+        gl.useProgram(this.program);
+        // Matrix uniform
+        gl.uniformMatrix4fv(uMatrix[0], false, m4.translate(viewProjMat, 0, 0, 0));
         // Shade?
-        gl.uniform1f(uShadeMix, 1);
+        gl.uniform1f(uShadeMix[0], 1);
         // Texture filters
         gl.bindTexture(gl.TEXTURE_2D, this.texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        gl.uniform1i(uTexture, 0);
-        const vertexBuffer = this.vertexBuffer;
-        const sizeFloat = Float32Array.BYTES_PER_ELEMENT;
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.uniform1i(uTexture[0], 0);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cuboids.flat(3)), gl.STATIC_DRAW);
-        const posAttr = attrs.get("pos");
-        const uvAttr = attrs.get("uv");
-        const normalAttr = attrs.get("normal");
-        gl.enableVertexAttribArray(posAttr);
-        gl.enableVertexAttribArray(uvAttr);
-        gl.enableVertexAttribArray(normalAttr);
-        gl.vertexAttribPointer(posAttr, 3, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 0);
-        gl.vertexAttribPointer(uvAttr, 2, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
-        gl.vertexAttribPointer(normalAttr, 3, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 5 * sizeFloat);
+        gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 0);
+        gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
+        gl.vertexAttribPointer(normalAttr[0], 3, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 5 * sizeFloat);
         gl.drawArrays(gl.TRIANGLES, 0, cuboids.flat(2).length);
     }
 }
