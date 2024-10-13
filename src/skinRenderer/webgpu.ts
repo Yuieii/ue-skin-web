@@ -512,14 +512,15 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             aspect: "depth-only"
         });
 
+        device.queue.writeBuffer(this.vertexUniformBuffer, 0,
+            new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
+        
         if (this.drawShadow) {
             const shadowSize = 24 - globalTranslate[1] / 2;
             const shSizeH = shadowSize / 2;
             const shadowY = -23;
 
             // Shadow
-            device.queue.writeBuffer(this.vertexUniformBuffer, 0,
-                new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
         
             device.queue.writeBuffer(this.vertexBuffer, 0,
                 new Float32Array([
@@ -572,9 +573,6 @@ export class WebGPUSkinRenderer extends SkinRenderer {
         }
 
         // ---
-
-        device.queue.writeBuffer(this.vertexUniformBuffer, 0,
-            new Float32Array(m4.translate(viewProjMat, 0, 0, 0)));
 
         device.queue.writeBuffer(this.fragmentUniformBuffer, 0,
             new Float32Array([1]));
