@@ -165,9 +165,9 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             @fragment fn fsMain(v: VSOut) -> @location(0) vec4f {
                 var d2 = v.texCoord - vec2f(0.5, 0.5);
                 var d = d2.x * d2.x + d2.y * d2.y;
-                d = clamp(d * 5.0, 0.0, 1.0) * 0.5 + 0.25;
+                d = smoothstep(0.0, 0.25, d);
 
-                return vec4f(vec3f(d), 1.0 - d);
+                return vec4f(vec3f(0.0), (1.0 - d) * 0.3);
             }
         `;
         const shaderModule = device.createShaderModule({

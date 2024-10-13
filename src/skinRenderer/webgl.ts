@@ -175,9 +175,9 @@ export class WebGLSkinRenderer extends SkinRenderer {
         void main() {
             vec2 d2 = vTexCoord - vec2(0.5, 0.5);
             float d = d2.x * d2.x + d2.y * d2.y;
-            d = clamp(d * 5.0, 0.0, 1.0) * 0.5 + 0.25;
+            d = smoothstep(0.0, 0.25, d);
 
-            outColor = vec4(vec3(d), 1.0 - d);
+            outColor = vec4(vec3(0.0), (1.0 - d) * 0.3);
         }            
         `;
 
