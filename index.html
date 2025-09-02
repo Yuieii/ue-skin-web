@@ -164,7 +164,22 @@
                     renderers.push(renderer);
                     container.appendChild(div);
 
-                    renderer.poseType = PoseType.VTubeStudio;
+                    // Use VTube Studio if we are on localhost and we specifically want that
+                    if (
+                        location.origin.toLowerCase().match(/^(?:127\.0\.0\.1|localhost)$/g) ||
+                        params.has("vts")
+                    )
+                    {
+                        renderer.poseType = PoseType.VTubeStudio;
+                    } else {
+                        // Available options: (enum PoseType @ base.ts:291)
+                        // - Walk
+                        // - LookAtMouseCursor
+                        // - BackLookAtMouseCursor
+                        // - VTubeStudio
+                        renderer.poseType = PoseType.Walk;
+                    }
+                    
                     renderer.initAnimation();
                 })();
 
