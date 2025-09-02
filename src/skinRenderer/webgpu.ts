@@ -2,6 +2,14 @@ import * as m4 from "../m4.js";
 import { RenderData, SHADOW_VERTEX_ELEMENT_COUNT, SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
 import { log, warn } from "../common.js";
 
+function delay(timeout: number): Promise<void> {
+    return new Promise((resolve, reject) => { 
+        setTimeout(() => {
+            resolve();
+        }, timeout);
+    });
+}
+
 export class WebGPUSkinRenderer extends SkinRenderer {
     public vertexUniformBuffer: GPUBuffer = null!;
     public fragmentUniformBuffer: GPUBuffer = null!;
@@ -60,6 +68,19 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             this.handleDeviceLost(info);
         });
 
+        // Ugly way... wait for the context to appear
+        log("WebGPUSkinRenderer", "Waiting for the WebGPU context...");
+        const waitSince = performance.now();
+        while (this.context == null) {
+            const waitedFor = performance.now() - waitSince;
+            if (waitedFor > 3000) {
+                throw new Error("Damn! The context is not creating for some reason");
+            }
+
+            await delay(100);
+        }
+
+        log("WebGPUSkinRenderer", "Configuring the WebGPU context...");
         this.context.configure({
             device,
             format: gpu.getPreferredCanvasFormat(),
@@ -452,6 +473,8 @@ export class WebGPUSkinRenderer extends SkinRenderer {
         const ctx = this.canvas!.getContext("webgpu");
         if (!ctx) throw new Error("WebGPU is not supported");
         this.context = ctx;
+
+        log("WebGPUSkinRenderer", "Created WebGPU context");
     }
 
     protected override async uploadSkinTextureData(skin: HTMLImageElement) {

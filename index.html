@@ -138,7 +138,10 @@
                 const skin = skins[i];
 
                 await (async () => {
-                    const renderer = await SkinRendererFactory.createPreferred(skin.path, !!skin.slim);
+                    const renderer = params.has("webgl")
+                        ? await SkinRendererFactory.createWebGL(skin.path, !!skin.slim)
+                        : await SkinRendererFactory.createPreferred(skin.path, !!skin.slim);
+
                     renderer.noAnim = false;
 
                     renderer.noGrass = true;
