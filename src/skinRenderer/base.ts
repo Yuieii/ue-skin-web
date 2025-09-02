@@ -292,6 +292,7 @@ export enum PoseType {
     Walk,
     LookAtMouseCursor,
     BackLookAtMouseCursor,
+    VTubeStudio,
 }
 
 export interface SkinRendererInit {
@@ -327,6 +328,8 @@ export abstract class SkinRenderer {
     public mousePos: [x: number, y: number] = [0, 0];
     public mousePosO: [x: number, y: number] | null = null;
     public mousePosRaw: [x: number, y: number] = [0, 0];
+    public static ws: WebSocket | null = null;
+    public static vtsPoseData: any = {};
 
     constructor(skin: HTMLImageElement | string, slim: boolean) {
         this.isSlim = slim;
@@ -431,6 +434,129 @@ export abstract class SkinRenderer {
         this.isGrass = isGrass;
         this.modifyInnerHead = modifyInnerHead && validModifier;
         this.modifyOuterHead = modifyOuterHead && validModifier;
+    }
+
+    private makeVTubeStudioPacket(payload: object) {
+        return {
+            apiName: "VTubeStudioPublicAPI",
+            apiVersion: "1.0",
+            requestID: "SomeID",
+            ...payload,
+        };
+    }
+
+    public async initAnimation() {
+        if (this.poseType == PoseType.VTubeStudio && !SkinRenderer.ws) {
+            SkinRenderer.vtsPoseData = {};
+
+            const url = new URL(location.href);
+            url.protocol = "ws:";
+            url.port = "8001";
+
+            SkinRenderer.ws = new WebSocket(url.origin);
+            SkinRenderer.ws.onerror = SkinRenderer.ws.onclose = () => {
+                setTimeout(() => {
+                    SkinRenderer.ws = null;
+                    this.initAnimation();
+                }, 5000);
+            };
+
+            SkinRenderer.ws.onopen = () => { 
+                const token = localStorage.getItem("ue.vts.authToken");
+                if (token == null) {
+                    SkinRenderer.ws!.send(JSON.stringify(this.makeVTubeStudioPacket({
+                        messageType: "AuthenticationTokenRequest",
+                        data: {
+                            pluginName: "Avatar",
+                            pluginDeveloper: "Yuieii"
+                        }
+                    })));
+                } else {
+                    SkinRenderer.ws!.send(JSON.stringify(this.makeVTubeStudioPacket({
+                        messageType: "AuthenticationRequest",
+                        data: {
+                            pluginName: "Avatar",
+                            pluginDeveloper: "Yuieii",
+                            authenticationToken: token
+                        }
+                    })));
+                }
+            };
+
+            const ws = SkinRenderer.ws;
+            
+            function nextFrame() {
+                return new Promise(res => {
+                    window.requestAnimationFrame(res);
+                    // setTimeout(res, 16);
+                });
+            }
+
+            while (true) {
+                try {
+                    if (ws.readyState != WebSocket.OPEN) {
+                        await nextFrame();
+                        continue;
+                    }
+
+                    if (SkinRenderer.vtsPoseData.authenticated) {
+                        ws.send(JSON.stringify(this.makeVTubeStudioPacket({
+                            messageType: "Live2DParameterListRequest"
+                        })));
+                    }
+
+                    const promise = new Promise<MessageEvent>(res => {
+                        ws.onmessage = (ev) => {
+                            ws.onmessage = null;
+                            res(ev);
+                        };
+                    });
+
+                    const data = await promise;
+                    const payload = JSON.parse(data.data);
+                    
+                    if (payload.messageType == "AuthenticationTokenResponse") {
+                        localStorage.setItem("ue.vts.authToken", payload.data.authenticationToken);
+                        // Authenticate with the given token
+                        ws.send(JSON.stringify(this.makeVTubeStudioPacket({
+                            messageType: "AuthenticationRequest",
+                            data: {
+                                pluginName: "Avatar",
+                                pluginDeveloper: "Yuieii",
+                                authenticationToken: payload.data.authenticationToken
+                            }
+                        })))
+                    } else if (payload.messageType == "AuthenticationResponse") {
+                        if (payload.data.authenticated) {
+                            log("VTubeStudio-API", "Authenticated");
+                            SkinRenderer.vtsPoseData.authenticated = true;
+                        } else {
+                            // Needs reauthenticate
+                            warn("VTubeStudio-API", "Authentication token revoked. Performing reauth...");
+                            ws.send(JSON.stringify(this.makeVTubeStudioPacket({
+                                messageType: "AuthenticationTokenRequest",
+                                data: {
+                                    pluginName: "Avatar",
+                                    pluginDeveloper: "Yuieii"
+                                }
+                            })));
+                        }
+                    } else if (payload.messageType == "Live2DParameterListResponse") {
+                        if (payload.data.modelLoaded) {
+                            SkinRenderer.vtsPoseData.dataO ??= SkinRenderer.vtsPoseData.data ?? payload.data.parameters;
+                            SkinRenderer.vtsPoseData.data = payload.data.parameters;
+                        }
+                    } else if (payload.messageType == "APIError") {
+                        if (payload.data.errorID == 50) {
+                            this.poseType = PoseType.Walk;
+                        }
+                    }
+                } catch (ex) {
+                    warn("VTubeStudio-API", ex);
+                    await nextFrame();
+                }
+            }
+        }
     }
 
     public async createCanvas(): Promise<HTMLCanvasElement> {
@@ -585,6 +711,81 @@ export abstract class SkinRenderer {
             pose.body = [bodyXRot, yRot / 2 + (this.poseType == PoseType.BackLookAtMouseCursor ? Math.PI : 0), 0];
             pose.bodyInv = [-bodyXRot, -yRot / 2, 0];
             camTy = 12;
+        } else if (this.poseType == PoseType.VTubeStudio) {
+            let [mx, my, mz] = [0, 0, 0];
+            let [ex, ey] = [0, 0];
+            let mouth = 0;
+            let breath = Math.sin(performance.now() / 4000 * Math.PI * 2);
+            let rArmRotL = 0;
+            let lArmRot = 0;
+            let [bx, by, bz] = [0, 0, 0];
+
+            if (SkinRenderer.vtsPoseData && SkinRenderer.vtsPoseData.data) {
+                const pose = <any[]>SkinRenderer.vtsPoseData.data;
+                const oldPose = <any[]>SkinRenderer.vtsPoseData.dataO;
+
+                function p(name: string) {
+                    const param = pose.find(p => p.name == name);
+                    if (!param) return 0;
+
+                    const oldParam = oldPose.find(p => p.name == name);
+
+                    const value = lerp(
+                        oldParam.value,
+                        param.value,
+                        0.15);
+                    
+                    oldParam.value = value;
+                    return value;
+                }
+
+                function pn(name: string): number {
+                    return pose.find(p => p.name == name)?.value ?? 0;
+                }
+
+                mx = p("ParamAngleX") / 15;
+                my = p("ParamAngleY") / 25;
+                mz = p("ParamAngleZ") / 30;
+
+                bx = p("ParamBodyAngleX") / 10 / 3;
+                by = p("ParamBodyAngleY") / 10 / 5;
+                bz = p("ParamBodyAngleZ") / 10 / 4;
+
+                ex = p("ParamEyeBallX") / 2;
+                ey = p("ParamEyeBallY") / 2;
+
+                const eyeOpen = (p("ParamEyeROpen") + p("ParamEyeLOpen")) / 2;
+                ex *= eyeOpen;
+                ey *= eyeOpen;
+
+                mouth = Math.min(1.5, p("ParamMouthOpenY"));
+                breath = p("ParamBreath");
+                lArmRot = p("ParamUeLArmRot") / 30;
+
+                if (pose.find(p => p.name == "ParamUeRArmRot_L")) {
+                    rArmRotL = (p("ParamUeRArmRot_L") - 0.4) / 0.6;
+                }
+            }
+            
+            const yaw = fn(clamp(((mx + ex) / 12 + 1) / 2, 0, 1), 2.5);
+            const pitch = fn(clamp(((my + ey) / 12 + 1) / 2, 0, 1), 2.5);
+            const tilt = fn(clamp((mz / 12 + 1) / 2, 0, 1), 2.5);
+            const xRot = lerp(-Math.PI * (45 / 180), Math.PI * (45 / 180), pitch) + breath / 20;
+            const yRot = lerp(Math.PI * (45 / 180), -Math.PI * (45 / 180), yaw);
+            const zRot = lerp(Math.PI * (45 / 180), -Math.PI * (45 / 180), tilt);
+            const bodyXRot = xRot * 0.5 + by; // Math.min(0, xRot);
+
+            pose.head = [xRot / 1.5, yRot / 1.5, zRot];
+            pose.body = [bodyXRot, yRot / 2 - bx, zRot / 2 - bz];
+            pose.bodyInv = [-bodyXRot, -yRot / 2 + bx, -zRot / 2 + bz];
+            pose.leftArm = [0, 0, -(breath + 1.1) / 20 - fn(mouth, 2.5) / 5 + lArmRot / 2 - rArmRotL * 2.5];
+            pose.rightArm = [0, 0, (breath + 1.1) / 20 + fn(mouth, 2.5) / 5 + lArmRot / 2];
+
+            if (document.body.classList.contains("fullscreen")) {
+                camTy = 4;
+            } else {
+                camTy = 12;
+            }
         } else {
             warn("SkinRenderer", `Unknown pose type: ${this.poseType} (${PoseType[this.poseType]})`);
         }
@@ -613,9 +814,9 @@ export abstract class SkinRenderer {
 
                 createBone([
                     // Right arm (inner / outer)
-                    createCuboid([-2, -12, -2], [this.isSlim ? 3 : 4, 12, 4], [32, 48], 0),
-                    createCuboid([-2, -12, -2], [this.isSlim ? 3 : 4, 12, 4], [48, 48], outerDilation),
-                ], [6, 12, 0], pose.rightArm),
+                    createCuboid([0, -12, -2], [this.isSlim ? 3 : 4, 12, 4], [32, 48], 0),
+                    createCuboid([0, -12, -2], [this.isSlim ? 3 : 4, 12, 4], [48, 48], outerDilation),
+                ], [4, 12, 0], pose.rightArm),
 
                 createBone([], [-2, 0, 0], pose.bodyInv, [
                     createBone([

@@ -72,9 +72,37 @@
                     min-width: 250px;
                 }
             }
+
+            .fullscreen {
+                overflow: hidden;
+            }
+            
+            .fullscreen #container {
+                width: 100vw;
+                height: 100vh;
+            }
+
+            .fullscreen #container .skin-item {
+                position: initial;
+                margin: initial;
+                display: initial;
+                margin: initial;
+                background: transparent;
+                border: initial;
+                border-radius: initial;
+                box-shadow: initial;
+                overflow: initial;
+                width: 100%;
+                max-width: fit-content;
+            }
+
+            .fullscreen #container .skin-item .avatar {
+                display: none;
+            }
+
         </style>
     </head>
-    <body>
+    <body class="">
         <div id="container" class="flex-container"></div>
         <!-- <div class="flex-container">
             <a class="repo-link" href="#" target="_blank">
@@ -89,14 +117,15 @@
         import { memoize } from "./build/common.js";
         window.memoize = memoize;
 
+        const params = new URLSearchParams(location.search);
+        if (params.has("full")) {
+            document.body.classList.add("fullscreen");
+        }
+
         (async () => {
             const skins = [
                 {
                     path: "yuieii.png",
-                    slim: true
-                },
-                {
-                    path: "momian.png",
                     slim: true
                 }
             ];
@@ -119,14 +148,24 @@
                     
                     const canvas = await renderer.createCanvas();
 
-                    const mult = 1.5; // Math.sqrt(2);
+                    const mult = 2 * window.devicePixelRatio; // Math.sqrt(2);
                     canvas.width = 420 * mult;
                     canvas.height = 720 * mult;
-                    canvas.style.width = canvas.width / mult;
+
+
+                    if (document.body.classList.contains("fullscreen")) {
+                        canvas.style.height = "100vh";
+                    } else {
+                        canvas.style.width = canvas.width / mult;
+                    }
+                    
                     canvas.classList.add("skin-3d");
                     div.appendChild(canvas);
                     renderers.push(renderer);
                     container.appendChild(div);
+
+                    renderer.poseType = PoseType.VTubeStudio;
+                    renderer.initAnimation();
                 })();
 
                 await (async () => {

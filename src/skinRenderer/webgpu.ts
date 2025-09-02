@@ -1,6 +1,6 @@
 import * as m4 from "../m4.js";
 import { RenderData, SHADOW_VERTEX_ELEMENT_COUNT, SkinRenderer, VERTEX_ELEMENT_COUNT } from "./base.js";
-import { log } from "../common.js";
+import { log, warn } from "../common.js";
 
 export class WebGPUSkinRenderer extends SkinRenderer {
     public vertexUniformBuffer: GPUBuffer = null!;
@@ -38,8 +38,20 @@ export class WebGPUSkinRenderer extends SkinRenderer {
             throw new Error("WebGPU is not supported");
         }
 
-        const info = await adapter.requestAdapterInfo();
+        // - `.requestAdapterInfo()` became deprecated and removed recently...
+        const info: GPUAdapterInfo | null = adapter.info ?? await (async () => {
+            const func = adapter.requestAdapterInfo;
+            if (!func) return null;
+            return await func();
+        })(); 
+
         log("WebGPUSkinRenderer", `-- Using WebGPU backend --`);
+        
+        if (info) {
+            log("WebGPUSkinRenderer", `GPU vendor: ${info.vendor}, architecture: ${info.architecture}`);
+        } else {
+            warn("WebGPUSkinRenderer", `GPU vendor info is not accessible!`);
+        }
 
         this.gpu = gpu;
         this.device = device;

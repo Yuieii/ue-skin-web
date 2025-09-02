@@ -246,10 +246,6 @@ export class WebGLSkinRenderer extends SkinRenderer {
         const uvAttr = attrs.get("uv")!;
         const normalAttr = attrs.get("normal")!;
 
-        posAttr.forEach(a => gl.enableVertexAttribArray(a));
-        uvAttr.forEach(a => gl.enableVertexAttribArray(a));
-        normalAttr.forEach(a => gl.enableVertexAttribArray(a));
-
         const vertexBuffer = this.vertexBuffer!;
         const sizeFloat = Float32Array.BYTES_PER_ELEMENT;
         gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -275,8 +271,11 @@ export class WebGLSkinRenderer extends SkinRenderer {
                 shSizeH, shadowY, shSizeH, 1, 1,
             ]), gl.STATIC_DRAW);
 
-            gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 0);
-            gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
+            gl.enableVertexAttribArray(posAttr[1]);
+            gl.enableVertexAttribArray(uvAttr[1]);
+
+            gl.vertexAttribPointer(posAttr[1], 3, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 0);
+            gl.vertexAttribPointer(uvAttr[1], 2, gl.FLOAT, false, SHADOW_VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
 
@@ -299,6 +298,10 @@ export class WebGLSkinRenderer extends SkinRenderer {
         gl.uniform1i(uTexture[0], 0);
 
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cuboids.flat(3)), gl.STATIC_DRAW);
+
+        gl.enableVertexAttribArray(posAttr[0]);
+        gl.enableVertexAttribArray(uvAttr[0]);
+        gl.enableVertexAttribArray(normalAttr[0]);
 
         gl.vertexAttribPointer(posAttr[0], 3, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 0);
         gl.vertexAttribPointer(uvAttr[0], 2, gl.FLOAT, false, VERTEX_ELEMENT_COUNT * sizeFloat, 3 * sizeFloat);

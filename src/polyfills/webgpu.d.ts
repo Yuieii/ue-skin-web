@@ -901,7 +901,8 @@ export declare global {
         readonly isFallbackAdapter: boolean;
         readonly limits: GPUSupportedLimits;
 
-        requestAdapterInfo(): Promise<GPUAdapterInfo>;
+        readonly info?: GPUAdapterInfo;
+        requestAdapterInfo?(): Promise<GPUAdapterInfo>;
         requestDevice(options?: Partial<GPUDeviceDescriptor>): Promise<GPUDevice>;
     }
 
