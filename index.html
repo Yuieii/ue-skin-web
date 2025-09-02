@@ -168,8 +168,9 @@
                     container.appendChild(div);
 
                     // Use VTube Studio if we are on localhost and we specifically want that
+                    const host = new URL(location.href).hostname;
                     if (
-                        location.origin.toLowerCase().match(/^(?:127\.0\.0\.1|localhost)$/g) ||
+                        host.toLowerCase().match(/^(?:127\.0\.0\.1|localhost)$/g) ||
                         params.has("vts")
                     )
                     {
