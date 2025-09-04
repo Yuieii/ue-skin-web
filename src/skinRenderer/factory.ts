@@ -7,9 +7,9 @@ const checkWebGPUAvailability = memoize(async () => {
     log("WebGPU-Availability", "Checking WebGPU availability...");
 
     // Check if the API is available
-    // (Does not exist in old browsers, unsecure context, etc.)
+    // (Does not exist in old browsers, insecure context, etc.)
     if (!navigator.gpu) {
-        warn("WebGPU-Availability", "WebGPU API is unavailable. Are we in an unsecure context or a legacy browser?");
+        warn("WebGPU-Availability", "WebGPU API is unavailable. Are we in an insecure context or a legacy browser?");
         return false;
     }
 
